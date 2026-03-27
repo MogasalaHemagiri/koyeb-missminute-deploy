@@ -25,7 +25,7 @@ def run_openclaw_sync(user_text, log_list):
         
         # THE MAGIC CLI TRIGGER
         # This calls the exact file specified in your package.json's "bin"
-        command = ["node", "openclaw.mjs", user_text]
+        command = ["node", "scripts/run-node.mjs", user_text]
         
         # Start the terminal process inside your cloned repo folder
         process = subprocess.Popen(

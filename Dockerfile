@@ -22,9 +22,10 @@ RUN pip install uv
 # 5. Clone your OpenClaw fork directly into the container
 RUN git clone https://github.com/Rhodawk-AI/Missminute1.git /app/Missminute1
 
-# 6. Install OpenClaw dependencies and build without starting the server
+# 6. Install OpenClaw dependencies ONLY (Agent compiles assets automatically at runtime)
 WORKDIR /app/Missminute1
-RUN pnpm install && pnpm run build
+RUN pnpm install
+
 
 # 7. Move back to the main app directory and copy the Telegram bot wrapper files
 WORKDIR /app

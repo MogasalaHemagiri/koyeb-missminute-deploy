@@ -26,7 +26,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         # Route the command through Groq (using Llama 3 for speed)
         completion = groq_client.chat.completions.create(
-            model="llama3-8b-8192",
+            model="llama-3.3-70b-versatile",
             messages=[
                 {"role": "system", "content": "You are a specialized agent orchestrating tasks for an OpenClaw system."},
                 {"role": "user", "content": user_text}

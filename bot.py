@@ -1,8 +1,6 @@
 import os
-import sys
-import io
+import subprocess
 import asyncio
-import contextlib
 import html
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -13,71 +11,66 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 if not TELEGRAM_TOKEN:
     raise ValueError("Missing TELEGRAM_TOKEN environment variable.")
 
-# Add the cloned repo to the Python path
-sys.path.append('/app/Missminute1')
-
-# --- IMPORT YOUR ACTUAL OPENCLAW FUNCTION HERE ---
-# You must replace this with the actual import from your fork.
-# Example: from openclaw.main import run_agent
-
-
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Hello Max! Missminute1 is deployed. Send me a task and I will execute it using OpenClaw.")
+    await update.message.reply_text("Hello Max! OpenClaw is connected via terminal. Send me a command.")
 
-
-def run_openclaw_sync(user_text, string_buffer):
+def run_openclaw_sync(user_text, log_list):
     """
-    This function runs in a separate thread. It redirects all terminal output 
-    (print statements) into a buffer that the Telegram bot reads from.
+    Runs the OpenClaw system via a terminal command and captures the live output.
+    This acts exactly like a human typing into the server console.
     """
-    # Redirect standard output and errors into our buffer
-    with contextlib.redirect_stdout(string_buffer), contextlib.redirect_stderr(string_buffer):
-        try:
-            print(f"--- Triggering OpenClaw Intent: {user_text} ---\n")
-            print("Initializing agent tools and ReAct loop...\n")
+    try:
+        log_list.append(f"--- Executing Command: {user_text} ---\n")
+        log_list.append("Firing up Node.js OpenClaw environment...\n")
+        
+        # THE MAGIC CLI TRIGGER
+        # This calls the exact file specified in your package.json's "bin"
+        command = ["node", "openclaw.mjs", user_text]
+        
+        # Start the terminal process inside your cloned repo folder
+        process = subprocess.Popen(
+            command,
+            cwd="/app/Missminute1",  
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,  # Merge errors into standard output
+            text=True,
+            bufsize=1  # Line buffered so we get updates instantly
+        )
+        
+        # Read the terminal output line-by-line in real-time
+        for line in process.stdout:
+            log_list.append(line)
             
-            # --- EXECUTE OPENCLAW ---
-            # Replace this placeholder block with your actual function call!
-            # Example: 
-            # run_agent(user_text) 
-            
-            # --- START PLACEHOLDER (Remove when integrating) ---
-            import time
-            time.sleep(2)
-            print("> [Thought] Need to analyze the request.")
-            time.sleep(2)
-            print("> [Action] Loading browser module...")
-            time.sleep(3)
-            print("> [Observation] Successfully navigated to target.")
-            # --- END PLACEHOLDER ---
+        process.wait() # Wait for the agent to finish its job
 
-            print("\nExecution phase completed.")
-            return True
+        if process.returncode == 0:
+            log_list.append("\n✅ Process finished naturally.")
+        else:
+            log_list.append(f"\n❌ Process exited with error code {process.returncode}")
             
-        except Exception as e:
-            print(f"\n[CRITICAL ERROR] Agent crashed: {str(e)}")
-            return False
-
+    except Exception as e:
+        log_list.append(f"\n[CRITICAL ERROR] Failed to run terminal command: {str(e)}\n")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
     
-    # 1. Send an initial message that we will update like a live dashboard
-    status_message = await update.message.reply_text("⚙️ Booting up OpenClaw engine...")
+    # Send the initial dashboard message
+    status_message = await update.message.reply_text("⚙️ Interfacing with server terminal...")
     
-    string_buffer = io.StringIO()
+    # We use a list instead of StringIO for better thread-safety when appending logs
+    log_list = []
     loop = asyncio.get_running_loop()
     
-    # 2. Start the heavy OpenClaw execution in a background thread so the bot doesn't freeze
-    task = loop.run_in_executor(None, run_openclaw_sync, user_text, string_buffer)
+    # Start the heavy terminal execution in a background thread
+    task = loop.run_in_executor(None, run_openclaw_sync, user_text, log_list)
     
     last_text = ""
     
-    # 3. The "Heartbeat" Loop: Update Telegram with the live logs while the task runs
+    # The Heartbeat Loop: Update Telegram with the live logs every 2.5 seconds
     while not task.done():
-        await asyncio.sleep(2.5) # Update every 2.5 seconds to respect Telegram API rate limits
+        await asyncio.sleep(2.5) 
         
-        current_log = string_buffer.getvalue()
+        current_log = "".join(log_list)
         if not current_log:
             continue
             
@@ -89,30 +82,30 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         if display_text != last_text:
             try:
-                # Use HTML to safely format the logs without breaking Telegram's parser
+                # Use HTML to safely format the logs without breaking Telegram's markdown
                 escaped_text = html.escape(display_text)
                 await status_message.edit_text(
-                    f"<b>🧠 Agent Thinking...</b>\n<pre>{escaped_text}</pre>", 
+                    f"<b>🖥️ Live Terminal...</b>\n<pre>{escaped_text}</pre>", 
                     parse_mode="HTML"
                 )
                 last_text = display_text
             except Exception:
-                # Ignore errors if the text hasn't changed enough to trigger an update
+                # Ignore minor update errors
                 pass
                 
-    # 4. Task is finished. Grab the final output.
+    # Task is finished. Grab the final output.
     await task 
-    final_log = string_buffer.getvalue()
+    final_log = "".join(log_list)
     final_display = final_log[-3500:] if len(final_log) > 3500 else final_log
     escaped_final = html.escape(final_display)
     
     await status_message.edit_text(
-        f"<b>✅ Task Complete</b>\n\n<b>Terminal Logs:</b>\n<pre>{escaped_final}</pre>", 
+        f"<b>✅ Task Complete</b>\n\n<b>Final Terminal Logs:</b>\n<pre>{escaped_final}</pre>", 
         parse_mode="HTML"
     )
 
 def main():
-    print("Starting Telegram Bot with Live Agent Logging...")
+    print("Starting Telegram Bot (Subprocess Mode)...")
     application = Application.builder().token(TELEGRAM_TOKEN).build()
     
     application.add_handler(CommandHandler("start", start_command))
